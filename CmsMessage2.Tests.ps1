@@ -20,19 +20,19 @@ function New-CmsRecipient { param([String]$Name, [Switch]$Invalid)
   return $req.CreateSelfSigned([datetime]::Now.AddDays(-1), [datetime]::Now.AddDays(365))
 }
 
-# ------------------------------------
 
-Write-Host "Generating certs"
-$vc1 = New-CmsRecipient "ValidCms1"
-$vc2 = New-CmsRecipient "ValidCms2"
-$ic = New-CmsRecipient "InvalidCms" -Invalid  # invalid cert
-
-$tmpfile = New-TemporaryFile
-
-
-# -----------------------------------
+# -------------------------------------------------------------
 
 Describe "CmsMessage cmdlets using X509 cert" -Tags "CI" {
+
+
+BeforeAll  {
+  Write-Host "Generating certs"  -ForegroundColor Gray
+  $vc1 = New-CmsRecipient "ValidCms1"
+  $vc2 = New-CmsRecipient "ValidCms2"
+  $ic = New-CmsRecipient "InvalidCms" -Invalid  # invalid cert
+  $tmpfile = New-TemporaryFile
+}
 
 It " Encrypting with X509Cert" {
  "test" | Protect-CmsMessage -to $vc1 | Should -BeLike '-----BEGIN CMS*'
@@ -81,45 +81,51 @@ It "Get-CmsMessage from file" {
 
 # ---------------------- FILES ----------------------------
 
-Write-Host "generating temp cert files"
-$tempDir = (New-TemporaryFile).Directory.FullName
-[System.IO.File]::WriteAllBytes("$tempDir\vc1.pfx", $vc1.Export("pfx"))
-[System.IO.File]::WriteAllBytes("$tempDir\vc2.pfx", $vc2.Export("pfx"))
-
 Describe "CmsMessage cmdlets using files" -Tags "CI" {
+ 
+BeforeAll {
+  Write-Host "generating temp cert files"  -ForegroundColor Gray
+  $vc1File = New-TemporaryFile
+  $vc2File = New-TemporaryFile
+  [System.IO.File]::WriteAllBytes("$vc1File", $vc1.Export("pfx"))
+  [System.IO.File]::WriteAllBytes("$vc2File", $vc2.Export("pfx"))
+}
 
 It "Encrypt With Single File" {
-  "test" | Protect-CmsMessage -to "$tempDir\vc1.pfx" | Unprotect-CmsMessage -To $vc1 | Should -Be 'test'
+  "test" | Protect-CmsMessage -to "$vc1File" | Unprotect-CmsMessage -To $vc1 | Should -Be 'test'
 }
 
 It "Encrypt With Multiple File" {
-  $msg = "test" | Protect-CmsMessage -to "$tempDir\vc1.pfx", "$tempDir\vc2.pfx" 
+  $msg = "test" | Protect-CmsMessage -to "$vc1File", "$vc2File" 
   ($msg | Unprotect-CmsMessage -to  $vc1) | Should -Be "test" 
   ($msg | Unprotect-CmsMessage -to  $vc2) | Should -Be "test" 
 }
 
 It "Decrypt with multiple files" {
   
-  "test" | Protect-CmsMessage -to $vc1 | Unprotect-CmsMessage -to "$tempDir\vc1.pfx", "$tempDir\vc2.pfx" | Should -Be 'test'
+  "test" | Protect-CmsMessage -to $vc1 | Unprotect-CmsMessage -to "$vc1File", "$vc2File" | Should -Be 'test'
 
 }
 
 }
 
-
-Describe "CmsMessage cmdlets using files" -Tags "CI" {}
 
 # ------------------ STORE ---------------------------------# 
-Write-Host "adding temp certs to CurrentUser\My Store"
-$store = [X509Store]::new("My", [StoreLocation]::CurrentUser)
-$store.Open("ReadWrite")
-$cert1 = [X509Certificate2]::new("$tempDir\vc1.pfx")
-$cert2 = [X509Certificate2]::new("$tempDir\vc2.pfx")
-$store.Add($cert1)
-$store.Add($cert2)
-# $store.Certificates
+
+
 
 Describe "CmsMessage cmdlets using cert Store" -Tags "CI" {
+
+BeforeAll -Scriptblock { 
+  Write-Host "adding temp certs to CurrentUser\My Store"  -ForegroundColor Gray
+  $store = [X509Store]::new("My", [StoreLocation]::CurrentUser)
+  $store.Open("ReadWrite")
+  $cert1 = [X509Certificate2]::new("$vc1File")
+  $cert2 = [X509Certificate2]::new("$vc2File")
+  $store.Add($cert1)
+  $store.Add($cert2)
+  # $store.Certificates 
+  }
 
  It "Encrypt/Decrypt using subject" {
   "test" | Protect-CmsMessage -to $cert1.Subject | Unprotect-CmsMessage | Should -Be "test"
@@ -141,11 +147,10 @@ Describe "CmsMessage cmdlets using cert Store" -Tags "CI" {
 
 # ----------------------------------------------------------------
 
-Write-Host "Removing temp certs from CurrentUser\My store"
+Write-Host "Removing temp files and certs"   -ForegroundColor Gray
 $store.Remove($cert1)
 $store.Remove($cert2)
 $store.Dispose()
 
-Write-Host "Removing temp files"
-Remove-Item "$tempDir\*.pfx"
-Remove-Item $tmpfile
+Remove-Item $vc1File, $vc2File, $tmpfile
+
