@@ -1,5 +1,8 @@
 
-openssl req -x509 -sha256 -nodes -days 365 -newkey rsa:2048 -keyout privateKey.key -out certificate.crt
+openssl req -x509 -sha256 -nodes -days 365 -newkey rsa:2048 -keyout privateKey.key -out certificate.crt -subj '/CN=CmsUser1'
+# openssl pkcs12 -export -out certificate.pfx -inkey privateKey.key -in certificate.crt -passout pass:P@ssw0rd  #use pass: to avoid pwd
+# openssl req -x509 -sha256 -nodes -days 365 -newkey rsa:2048 -keyout privateKey.key -out certificate.crt -subj '/CN=CmsUser1' -addext extendedKeyUsage=1.3.6.1.4.1.311.80.1 -addext keyUsage=keyEncipherment
+
 
 "hello" | openssl cms  -encrypt -recip .\certificate.crt -outform PEM
 
