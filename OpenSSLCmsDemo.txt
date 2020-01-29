@@ -1,0 +1,11 @@
+
+openssl req -x509 -sha256 -nodes -days 365 -newkey rsa:2048 -keyout privateKey.key -out certificate.crt
+
+"hello" | openssl cms  -encrypt -recip .\certificate.crt -outform PEM
+
+"-----BEGIN CMS-----..."  | openssl cms -decrypt -inform PEM -inkey .\privateKey.key
+
+
+$cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(".\certificate.crt")
+
+"hello" | Protect-CmsMessage -to $cert | openssl cms -decrypt -inform PEM -inkey .\privateKey.key

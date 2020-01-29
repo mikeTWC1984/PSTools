@@ -117,4 +117,88 @@ If($OtherExtensions) {
  }
 
 
- Export-ModuleMember -Function "New-SelfSignedCertificate2"
+ # --------------------------
+
+ function Protect-CmsMessage2 { param([Parameter(ValueFromPipeline=$true)][String]$Message, [X509Certificate2]$Cert) 
+
+   $opt = [System.Base64FormattingOptions]::InsertLineBreaks
+   $contentInfo = [System.Security.Cryptography.Pkcs.ContentInfo]::new($OutputEncoding.GetBytes($Message))
+   $cms = [System.Security.Cryptography.Pkcs.EnvelopedCms]::new($contentInfo)
+   $cms.Encrypt($cert) 
+   $base64 =  [System.Convert]::ToBase64String($cms.Encode(), $opt )
+   return "-----BEGIN CMS-----`n$base64`n-----END CMS-----"
+}
+
+function Unprotect-CmsMessage2 { param([Parameter(ValueFromPipeline=$true)]$Cipher, $Cert)
+   $base64 = [regex]::Match($Cipher, 'CMS-----\n((?:.*\r?\n?)*)\n-----END').Groups[1].Value
+   $cms = [System.Security.Cryptography.Pkcs.EnvelopedCms]::new()
+   $cms.Decode([System.Convert]::FromBase64String($base64))
+   if($Cert) {$cms.Decrypt($Cert)} Else {$cms.Decrypt()}
+   return $OutputEncoding.GetString($cms.ContentInfo.Content)
+}
+
+function Import-PfxCertificate2 { param( 
+    [Parameter(ValueFromPipeline=$true)][X509Certificate2]$Certificate
+   ,[String]$FilePath, [String]$Password, [String]$CertStore="My"
+   )
+
+   If(!$Certificate) { $Certificate = [X509Certificate2]::new($FilePath, $Password, [X509KeyStorageFlags]::PersistKeySet) }
+      
+   $store = [X509Store]::new($CertStore)
+   $store.Open("ReadWrite")
+   $store.Add($Certificate)
+   $store.Dispose()
+   return $true
+ }
+
+function Export-PfxCertificate2 { param(
+   [Parameter(ValueFromPipeline=$true)][X509Certificate2]$cert,
+   [String]$FilePath, [String]$Password,[X509ContentType]$Type = "Pfx"
+   )
+   If(!$FilePath) { $FilePath = "$($cert.SerialNumber).pfx" }
+   [System.IO.File]::WriteAllBytes($FilePath, $cert.Export($Type, "P@ssw0rd"))
+}
+
+ # kind of Get-ChildItem cert:\My
+function Get-Certificate2 { param([String]$Thumbprint, [String]$Name="*", [String]$CertStore="My")
+  $store = [X509Store]::new($CertStore); $store.Open("ReadOnly")
+  $certList = If($Thumbprint) { $store.Certificates.Find("FindByThumbprint", $Thumbprint, $false)}
+        Else {$store.Certificates | Where-Object { $_.Thumbprint -like $Name -OR $_.Subject -like $Name}}
+  If( $certList.Count -eq 1) {return $certList[0] } Else {return $certList }
+}
+function Remove-Certificate2 { param(
+   [Parameter(ValueFromPipeline=$true)][X509Certificate2]$Certificate, [String]$CertStore = "My"
+)
+  Begin { $store = [X509Store]::new("My"); $store.Open("ReadWrite") }
+  Process { $store.Remove($Certificate) }
+  End { $store.Dispose() }
+ 
+}
+
+<# ------------- TEST -------------
+
+Get-Certificate -CertStore "My"
+
+# in-memory cert
+$cert = New-SelfSignedCertificate2 -Name "SamplePSCoreNix" -KeyLength 4096
+
+# Encrypt/Decrypt
+$cipher = Protect-CmsMessage2 -Message (irm www.example.com) -Cert $cert
+$cipher | Unprotect-CmsMessage2 -Cert $cert
+
+#export to file
+$cert | Export-PfxCertificate2 -FilePath "SamplePSCoreNix.pfx" -Password "P@ssw0rd"
+
+#  import to cert store
+$cert | Import-PfxCertificate2 -CertStore "My"
+
+# get cert from store
+$cert = Get-Certificate -Name "*SamplePSCoreNix*" -CertStore "My"
+$cipher | Unprotect-CmsMessage2  # once added to My store no need to specify cert
+
+# Remove Cert from the store
+$cert | Remove-Certificate -CertStore "My"
+
+#>
+
+ Export-ModuleMember -Function "New-SelfSignedCertificate2", Protect-CmsMessage2, Unprotect-CmsMessage2, Get-Certificate2, Remove-Certificate2, Import-PfxCertificate2 
