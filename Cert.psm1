@@ -201,4 +201,18 @@ $cert | Remove-Certificate -CertStore "My"
 
 #>
 
- Export-ModuleMember -Function "New-SelfSignedCertificate2", Protect-CmsMessage2, Unprotect-CmsMessage2, Get-Certificate2, Remove-Certificate2, Import-PfxCertificate2 
+function New-CmsRecipient {
+  [CmdletBinding(SupportsShouldProcess = $true)]
+  param([String]$Name, [Switch]$Invalid)
+  $hash = [HashAlgorithmName]::SHA256
+  $pad = [RSASignaturePadding]::Pkcs1
+  $oids = [OidCollection]::new()
+  $oids.Add("1.3.6.1.4.1.311.80.1") | Out-Null
+  $ext1 = [X509KeyUsageExtension]::new([X509KeyUsageFlags]::DataEncipherment, $false)
+  $ext2 = [X509EnhancedKeyUsageExtension]::new($oids, $false)
+  $req = ([CertificateRequest]::new("CN=$Name", ([RSA]::Create(2048)), $hash, $pad))
+  if (!$Invalid) { ($ext1, $ext2).ForEach( { $req.CertificateExtensions.Add($_) }) }
+  return $req.CreateSelfSigned([datetime]::Now.AddDays(-1), [datetime]::Now.AddDays(365))
+}
+
+ Export-ModuleMember -Function "New-SelfSignedCertificate2", Protect-CmsMessage2, Unprotect-CmsMessage2, Get-Certificate2, Remove-Certificate2, Import-PfxCertificate2, New-CmsRecipient 
