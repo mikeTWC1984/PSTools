@@ -1,8 +1,9 @@
+
 @"
 [ cms_ext ]
-keyUsage=keyEncipherment
-extendedKeyUsage=1.3.6.1.4.1.311.80.1
-"@  | Out-File cms.cnf -Encoding default
+keyUsage=keyEncipherment, digitalSignature
+extendedKeyUsage=1.3.6.1.4.1.311.80.1, emailProtection
+"@ | Out-File cms.cnf -Encoding default
 
 openssl req -new -x509 -days 365 -keyout ca.key -out ca.cert -nodes -subj "/CN=CA"
 openssl pkcs12 -export -out ca.pfx -inkey ca.key -in ca.cert  -passout "pass:123"
