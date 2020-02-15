@@ -28,3 +28,8 @@ $cipher = "secret" | Protect-CmsMessage -to $server
 
 $cipher | Unprotect-CmsMessage -to $server
 
+
+$cipher = "message" | openssl cms -encrypt -recip client.cert 
+$message = $cipher | openssl cms -decrypt -inkey ./client.key
+$message | openssl cms -sign -signer client.cert -inkey ./client.key | openssl cms -verify -CAfile ./ca.cert
+$message | openssl cms -encrypt -recip client.cert -sign -signer client.cert -inkey ./client.key  -nodetach
